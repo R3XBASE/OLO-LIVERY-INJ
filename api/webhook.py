@@ -1,31 +1,54 @@
 import os
 import json
-import asyncio
+import logging
+from http.server import BaseHTTPRequestHandler
 from telegram import Update
-from bot import setup_webhook
+from api.bot import setup_webhook
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 application = None
 
-async def handler(request):
-    global application
-    
-    if application is None:
-        application = await setup_webhook()
-    
-    if request.method == 'POST':
-        body = await request.text()
-        data = json.loads(body)
-        
-        update = Update.de_json(data, application.bot)
-        await application.process_update(update)
-        
-        return {'statusCode': 200, 'body': 'OK'}
-    
-    return {'statusCode': 405, 'body': 'Method Not Allowed'}
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b'Bot is running!')
+        return
 
-if __name__ == '__main__':
-    async def main():
-        app = await setup_webhook()
-        await app.run_polling()
-    
-    asyncio.run(main())
+    def do_POST(self):
+        global application
+        
+        try:
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
+            
+            logger.info(f"Received update: {data}")
+            
+            if application is None:
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                application = loop.run_until_complete(setup_webhook())
+            
+            update = Update.de_json(data, application.bot)
+            
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(application.process_update(update))
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'ok': True}).encode())
+            
+        except Exception as e:
+            logger.error(f"Error processing update: {e}", exc_info=True)
+            self.send_response(500)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'error': str(e)}).encode())
