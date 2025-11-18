@@ -1,5 +1,11 @@
 import os
+import sys
 import logging
+from pathlib import Path
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from handlers.user_handlers import UserHandlers
@@ -17,6 +23,9 @@ logger = logging.getLogger(__name__)
 class LiveryBot:
     def __init__(self):
         self.token = os.getenv('BOT_TOKEN')
+        if not self.token:
+            raise ValueError("BOT_TOKEN not found in environment variables")
+        
         self.application = None
         self.user_handlers = UserHandlers()
         self.admin_handlers = AdminHandlers()
@@ -70,7 +79,7 @@ class LiveryBot:
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = update.message
         
-        if message.text.startswith('/'):
+        if message.text and message.text.startswith('/'):
             return
         
         if message.photo and context.user_data.get('awaiting_payment_proof'):
@@ -80,7 +89,7 @@ class LiveryBot:
 
     async def show_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         help_text = """
-🤖 **Livery Injection Bot - Help**
+🔧 **Livery Injection Bot - Help**
 
 **Commands:**
 /start - Mulai bot dan lihat menu utama
@@ -104,8 +113,8 @@ Jika mengalami masalah, hubungi admin.
         
         keyboard = [
             [InlineKeyboardButton("🏠 Menu Utama", callback_data="main_menu")],
-            [InlineKeyboardButton("🔗 Account Setup", callback_data="account_menu")],
-            [InlineKeyboardButton("💰 Top-up", callback_data="topup_menu")]
+            [InlineKeyboardButton("👤 Account Setup", callback_data="account_menu")],
+            [InlineKeyboardButton("💳 Top-up", callback_data="topup_menu")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -141,5 +150,6 @@ application = None
 
 async def setup_webhook():
     global application
-    application = await bot.run_webhook()
+    if application is None:
+        application = await bot.run_webhook()
     return application
